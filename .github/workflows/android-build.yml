@@ -25,20 +25,13 @@ jobs:
           sudo apt update
           sudo apt install gradle -y
 
-      - name: Gerar Gradle Wrapper
-        run: |
-          gradle wrapper
-
-      - name: Dar permissão ao Gradle
-        run: chmod +x gradlew
-
       - name: Decodificar Keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > keystore.jks
 
       - name: Build AAB
         run: |
-          ./gradlew bundleRelease \
+          gradle bundleRelease \
             -Pandroid.injected.signing.store.file=keystore.jks \
             -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
             -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
