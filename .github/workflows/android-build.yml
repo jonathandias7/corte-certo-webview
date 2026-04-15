@@ -1,6 +1,9 @@
 name: Build AAB (Final)
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -14,19 +17,19 @@ jobs:
       - name: Instalar Java
         uses: actions/setup-java@v3
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
 
       - name: Instalar Gradle moderno
         run: |
           wget https://services.gradle.org/distributions/gradle-7.5-bin.zip
           unzip gradle-7.5-bin.zip
-          export PATH=$PATH:$PWD/gradle-7.5/bin
+          echo "$PWD/gradle-7.5/bin" >> $GITHUB_PATH
 
       - name: Gerar Gradle Wrapper
         run: gradle wrapper --gradle-version 7.5
 
-      - name: Dar permissão
+      - name: Dar permissão ao Gradle
         run: chmod +x gradlew
 
       - name: Decodificar Keystore
