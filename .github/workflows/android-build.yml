@@ -20,21 +20,30 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # 🔥 INSTALA ANDROID SDK CORRETAMENTE
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Instalar SDK 35 limpo
+      # 🔥 INSTALA SDK DO ZERO (SEM BUG)
+      - name: Instalar Android SDK manual
         run: |
+          export ANDROID_HOME=$HOME/android-sdk
+          mkdir -p $ANDROID_HOME/cmdline-tools
+
+          cd $ANDROID_HOME/cmdline-tools
+
+          wget https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip -O tools.zip
+          unzip tools.zip
+          mv cmdline-tools latest
+
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+
           yes | sdkmanager --licenses
-          sdkmanager --update
 
-          sdkmanager --uninstall "platforms;android-35" || true
-          sdkmanager "platforms;android-35"
-          sdkmanager "build-tools;35.0.0"
           sdkmanager "platform-tools"
+          sdkmanager "build-tools;35.0.0"
+          sdkmanager "platforms;android-35"
 
-      - name: Instalar Gradle moderno
+      - name: Definir ANDROID_HOME
+        run: echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+
+      - name: Instalar Gradle
         run: |
           wget https://services.gradle.org/distributions/gradle-7.5-bin.zip
           unzip gradle-7.5-bin.zip
@@ -43,10 +52,10 @@ jobs:
       - name: Gerar Gradle Wrapper
         run: gradle wrapper --gradle-version 7.5
 
-      - name: Dar permissão ao Gradle
+      - name: Permissão Gradle
         run: chmod +x gradlew
 
-      - name: Limpar cache do Gradle
+      - name: Limpar cache
         run: |
           rm -rf ~/.gradle/caches/
           rm -rf ~/.gradle/wrapper/
