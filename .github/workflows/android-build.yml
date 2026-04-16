@@ -20,7 +20,7 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # 🔥 INSTALA SDK DO ZERO (SEM BUG)
+      # 🔥 INSTALA SDK DO ZERO
       - name: Instalar Android SDK manual
         run: |
           export ANDROID_HOME=$HOME/android-sdk
@@ -40,25 +40,27 @@ jobs:
           sdkmanager "build-tools;35.0.0"
           sdkmanager "platforms;android-35"
 
-      # 🔥 REMOVE SDK BUGADO DO RUNNER (CRÍTICO)
+      # 🔥 REMOVE SDK CONFLITANTE
       - name: Remover SDK antigo
         run: |
           sudo rm -rf /usr/local/lib/android/sdk || true
 
-      # 🔥 UNIFICA VARIÁVEIS (CORREÇÃO DO ERRO)
+      # 🔥 PADRONIZA VARIÁVEIS
       - name: Corrigir variáveis do SDK
         run: |
           echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
 
-      - name: Instalar Gradle
+      # 🔥 GRADLE 8.2 (CORREÇÃO CRÍTICA)
+      - name: Instalar Gradle 8.2
         run: |
-          wget https://services.gradle.org/distributions/gradle-7.5-bin.zip
-          unzip gradle-7.5-bin.zip
-          echo "$PWD/gradle-7.5/bin" >> $GITHUB_PATH
+          wget https://services.gradle.org/distributions/gradle-8.2-bin.zip
+          unzip gradle-8.2-bin.zip
+          echo "$PWD/gradle-8.2/bin" >> $GITHUB_PATH
 
+      # 🔥 WRAPPER CORRETO
       - name: Gerar Gradle Wrapper
-        run: gradle wrapper --gradle-version 7.5
+        run: gradle wrapper --gradle-version 8.2
 
       - name: Permissão Gradle
         run: chmod +x gradlew
