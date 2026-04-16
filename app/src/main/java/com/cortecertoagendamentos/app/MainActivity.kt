@@ -26,28 +26,40 @@ class MainActivity : AppCompatActivity() {
         settings.allowFileAccess = true
         settings.allowContentAccess = true
 
-        // 🔥 ESSENCIAL para evitar bloqueios
+        // 🔥 SEGURANÇA CORRETA
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
         }
 
-        // 🔥 melhora performance
+        // 🔥 PERFORMANCE
         settings.cacheMode = WebSettings.LOAD_DEFAULT
 
-        // 🔥 evita abrir navegador externo
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            settings.safeBrowsingEnabled = true
+        }
+
+        // 🔥 HARDWARE ACCELERATION
+        webView.setLayerType(WebView.LAYER_TYPE_HARDWARE, null)
+
         webView.webViewClient = object : WebViewClient() {
 
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                view?.loadUrl(request?.url.toString())
+                request?.url?.let {
+                    view?.loadUrl(it.toString())
+                }
                 return true
             }
 
-            // 🔥 ignora erros SSL (importante pra não travar)
-            override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler, error: SslError?) {
-                handler.proceed()
+            // 🔥 SSL SEGURO (IMPORTANTE PRA PLAY STORE)
+            override fun onReceivedSslError(
+                view: WebView?,
+                handler: SslErrorHandler,
+                error: SslError?
+            ) {
+                handler.cancel() // NÃO IGNORA ERRO
             }
 
-            // 🔥 evita tela branca em erro
+            // 🔥 ERRO DE CONEXÃO
             override fun onReceivedError(
                 view: WebView?,
                 request: WebResourceRequest?,
@@ -63,7 +75,7 @@ class MainActivity : AppCompatActivity() {
 
         webView.webChromeClient = WebChromeClient()
 
-        // 🔥 URL principal
+        // 🔥 SUA URL
         webView.loadUrl("https://cortecertoagendamentos.com.br/")
     }
 
@@ -75,7 +87,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 🔥 evita vazamento de memória
     override fun onDestroy() {
         webView.destroy()
         super.onDestroy()
