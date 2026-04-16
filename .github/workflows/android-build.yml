@@ -20,6 +20,20 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # 🔥 INSTALA ANDROID SDK CORRETAMENTE
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar SDK 35 limpo
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager --update
+
+          sdkmanager --uninstall "platforms;android-35" || true
+          sdkmanager "platforms;android-35"
+          sdkmanager "build-tools;35.0.0"
+          sdkmanager "platform-tools"
+
       - name: Instalar Gradle moderno
         run: |
           wget https://services.gradle.org/distributions/gradle-7.5-bin.zip
@@ -37,7 +51,6 @@ jobs:
           rm -rf ~/.gradle/caches/
           rm -rf ~/.gradle/wrapper/
 
-      # 🔥 CORREÇÃO AQUI — agora cria dentro da pasta app
       - name: Decodificar Keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > app/keystore.jks
