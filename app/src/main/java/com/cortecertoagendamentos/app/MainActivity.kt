@@ -1,6 +1,9 @@
 package com.cortecertoagendamentos.app
 
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
 import android.net.http.SslError
 import android.os.Build
 import android.os.Bundle
@@ -11,6 +14,8 @@ import androidx.appcompat.app.AppCompatActivity
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
+    private var filePathCallback: ValueCallback<Array<Uri>>? = null
+    private val FILE_CHOOSER_REQUEST_CODE = 100
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,10 +52,25 @@ class MainActivity : AppCompatActivity() {
                 view: WebView?,
                 request: WebResourceRequest?
             ): Boolean {
-                request?.url?.let {
-                    view?.loadUrl(it.toString())
+
+                val url = request?.url.toString()
+
+                // 🔥 WHATSAPP E LINKS EXTERNOS
+                if (
+                    url.contains("wa.me") ||
+                    url.contains("api.whatsapp.com") ||
+                    url.contains("web.whatsapp.com")
+                ) {
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                        startActivity(intent)
+                        return true
+                    } catch (e: Exception) {
+                        return false
+                    }
                 }
-                return true
+
+                return false
             }
 
             override fun onReceivedSslError(
@@ -58,7 +78,7 @@ class MainActivity : AppCompatActivity() {
                 handler: SslErrorHandler,
                 error: SslError?
             ) {
-                handler.cancel() // segurança Play Store
+                handler.cancel()
             }
 
             override fun onReceivedError(
@@ -74,11 +94,33 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        webView.webChromeClient = WebChromeClient()
+        // 🔥 UPLOAD DE ARQUIVO (LOGO)
+        webView.webChromeClient = object : WebChromeClient() {
+
+            override fun onShowFileChooser(
+                webView: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+
+                this@MainActivity.filePathCallback = filePathCallback
+
+                val intent = Intent(Intent.ACTION_GET_CONTENT)
+                intent.type = "*/*"
+                intent.addCategory(Intent.CATEGORY_OPENABLE)
+
+                startActivityForResult(
+                    Intent.createChooser(intent, "Selecionar arquivo"),
+                    FILE_CHOOSER_REQUEST_CODE
+                )
+
+                return true
+            }
+        }
 
         webView.loadUrl("https://cortecertoagendamentos.com.br/")
 
-        // 🔥 NOVO BACK PRESS (ANDROID MODERNO)
+        // 🔥 BACK BUTTON
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (webView.canGoBack()) {
@@ -88,6 +130,24 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
+
+            if (filePathCallback == null) return
+
+            val result = if (resultCode == Activity.RESULT_OK && data != null) {
+                arrayOf(data.data!!)
+            } else {
+                null
+            }
+
+            filePathCallback?.onReceiveValue(result)
+            filePathCallback = null
+        }
+
+        super.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun onDestroy() {
