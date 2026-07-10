@@ -11,80 +11,70 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ------------------------------------------------------------
+      # BAIXAR PROJETO
+      # ------------------------------------------------------------
       - name: Checkout código
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
+      # ------------------------------------------------------------
+      # JAVA 17
+      # ------------------------------------------------------------
       - name: Instalar Java
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # 🔥 INSTALA SDK DO ZERO
+      # ------------------------------------------------------------
+      # INSTALAR ANDROID SDK
+      # ------------------------------------------------------------
       - name: Instalar Android SDK manual
         run: |
           export ANDROID_HOME=$HOME/android-sdk
-          mkdir -p $ANDROID_HOME/cmdline-tools
 
-          cd $ANDROID_HOME/cmdline-tools
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+
+          cd "$ANDROID_HOME/cmdline-tools"
 
           wget https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip -O tools.zip
+
           unzip tools.zip
+
           mv cmdline-tools latest
 
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
 
           yes | sdkmanager --licenses
 
           sdkmanager "platform-tools"
+          sdkmanager "build-tools;34.0.0"
           sdkmanager "build-tools;35.0.0"
           sdkmanager "platforms;android-35"
 
-      # 🔥 REMOVE SDK CONFLITANTE
+      # ------------------------------------------------------------
+      # REMOVER SDK ANTIGO DO RUNNER
+      # ------------------------------------------------------------
       - name: Remover SDK antigo
         run: |
           sudo rm -rf /usr/local/lib/android/sdk || true
 
-      # 🔥 PADRONIZA VARIÁVEIS
-      - name: Corrigir variáveis do SDK
+      # ------------------------------------------------------------
+      # CONFIGURAR VARIÁVEIS DO SDK
+      # ------------------------------------------------------------
+      - name: Configurar variáveis do Android SDK
         run: |
-          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$HOME/android-sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> "$GITHUB_ENV"
+          echo "$HOME/android-sdk/platform-tools" >> "$GITHUB_PATH"
 
-      # 🔥 GRADLE 8.2 (CORREÇÃO CRÍTICA)
-      - name: Instalar Gradle 8.2
+      # ------------------------------------------------------------
+      # INSTALAR GRADLE 8.7
+      # ------------------------------------------------------------
+      - name: Instalar Gradle 8.7
         run: |
-          wget https://services.gradle.org/distributions/gradle-8.2-bin.zip
-          unzip gradle-8.2-bin.zip
-          echo "$PWD/gradle-8.2/bin" >> $GITHUB_PATH
+          wget https://services.gradle.org/distributions/gradle-8.7-bin.zip
 
-      # 🔥 WRAPPER CORRETO
-      - name: Gerar Gradle Wrapper
-        run: gradle wrapper --gradle-version 8.2
+          unzip gradle-8.7-bin.zip
 
-      - name: Permissão Gradle
-        run: chmod +x gradlew
-
-      - name: Limpar cache
-        run: |
-          rm -rf ~/.gradle/caches/
-          rm -rf ~/.gradle/wrapper/
-
-      - name: Decodificar Keystore
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > app/keystore.jks
-
-      - name: Build AAB
-        run: |
-          ./gradlew clean
-          ./gradlew bundleRelease \
-            -Pandroid.injected.signing.store.file=$PWD/app/keystore.jks \
-            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
-            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
-            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
-
-      - name: Upload AAB
-        uses: actions/upload-artifact@v4
-        with:
-          name: corte-certo-aab
-          path: app/build/outputs/bundle/release/app-release.aab
+          echo "$PWD/gradle-8.
