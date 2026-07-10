@@ -1,17 +1,25 @@
 package com.cortecertoagendamentos.app
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Build
 import android.os.Bundle
-import android.webkit.*
+import android.webkit.CookieManager
+import android.webkit.SslErrorHandler
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
-import android.Manifest
-import android.content.pm.PackageManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessaging
@@ -19,51 +27,121 @@ import com.google.firebase.messaging.FirebaseMessaging
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
+
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
-    private val FILE_CHOOSER_REQUEST_CODE = 100
-    private var firebaseToken = ""
-    private fun iniciarFirebase() {
 
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+    private val fileChooserRequestCode = 100
+    private val notificationPermissionRequestCode = 500
 
-        if (
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
+    private val siteUrl =
+        "https://cortecertoagendamentos.com.br/"
+
+    private val siteHost =
+        "cortecertoagendamentos.com.br"
+
+    /*
+    |--------------------------------------------------------------------------
+    | INICIALIZAÇÃO
+    |--------------------------------------------------------------------------
+    */
+
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun onCreate(savedInstanceState: Bundle?) {
+
+        super.onCreate(savedInstanceState)
+
+        solicitarPermissaoNotificacoes()
+
+        configurarFirebase()
+
+        webView = WebView(this)
+
+        setContentView(webView)
+
+        configurarWebView()
+
+        webView.loadUrl(siteUrl)
+
+        configurarBotaoVoltar()
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | PERMISSÃO DE NOTIFICAÇÕES
+    |--------------------------------------------------------------------------
+    */
+
+    private fun solicitarPermissaoNotificacoes() {
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return
+        }
+
+        val permissao = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.POST_NOTIFICATIONS
+        )
+
+        if (permissao != PackageManager.PERMISSION_GRANTED) {
 
             ActivityCompat.requestPermissions(
                 this,
                 arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                100
+                notificationPermissionRequestCode
             )
         }
     }
 
-    FirebaseMessaging.getInstance().token
-        .addOnSuccessListener {
+    /*
+    |--------------------------------------------------------------------------
+    | FIREBASE
+    |--------------------------------------------------------------------------
+    |
+    | Obtém o token atual e o guarda no armazenamento privado do aplicativo.
+    | A ponte AndroidBridge disponibilizará o token ao JavaScript.
+    |
+    |--------------------------------------------------------------------------
+    */
 
-            firebaseToken = it
+    private fun configurarFirebase() {
 
-            android.webkit.CookieManager.getInstance().setCookie(
-                "https://cortecertoagendamentos.com.br",
-                "firebase_token=$it"
+        FirebaseMessaging.getInstance()
+            .token
+            .addOnCompleteListener { tarefa ->
+
+                if (!tarefa.isSuccessful) {
+                    return@addOnCompleteListener
+                }
+
+                val token = tarefa.result ?: return@addOnCompleteListener
+
+                salvarTokenFirebase(token)
+            }
+    }
+
+    private fun salvarTokenFirebase(token: String) {
+
+        getSharedPreferences(
+            AndroidBridge.PREFS_NAME,
+            MODE_PRIVATE
+        )
+            .edit()
+            .putString(
+                AndroidBridge.KEY_FCM_TOKEN,
+                token
             )
+            .apply()
+    }
 
-            android.webkit.CookieManager.getInstance().flush()
-
-        }
-
-}
+    /*
+    |--------------------------------------------------------------------------
+    | CONFIGURAÇÃO DO WEBVIEW
+    |--------------------------------------------------------------------------
+    */
 
     @SuppressLint("SetJavaScriptEnabled")
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+    private fun configurarWebView() {
 
-        webView = WebView(this)
-        setContentView(webView)
-        iniciarFirebase()
         val settings = webView.settings
 
         settings.javaScriptEnabled = true
@@ -72,19 +150,87 @@ class MainActivity : AppCompatActivity() {
         settings.useWideViewPort = true
         settings.allowFileAccess = true
         settings.allowContentAccess = true
-
-        // 🔥 SEGURANÇA
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-        }
-
         settings.cacheMode = WebSettings.LOAD_DEFAULT
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+
+            settings.mixedContentMode =
+                WebSettings.MIXED_CONTENT_NEVER_ALLOW
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+
             settings.safeBrowsingEnabled = true
         }
 
-        webView.setLayerType(WebView.LAYER_TYPE_HARDWARE, null)
+        /*
+        |--------------------------------------------------------------------------
+        | IDENTIFICAÇÃO DO APLICATIVO
+        |--------------------------------------------------------------------------
+        */
+
+        settings.userAgentString =
+            settings.userAgentString + " CorteCertoAndroid/1.0"
+
+        /*
+        |--------------------------------------------------------------------------
+        | COOKIES E SESSÃO PHP
+        |--------------------------------------------------------------------------
+        */
+
+        CookieManager.getInstance().apply {
+
+            setAcceptCookie(true)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+
+                setAcceptThirdPartyCookies(
+                    webView,
+                    true
+                )
+            }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | PONTE ANDROID → JAVASCRIPT
+        |--------------------------------------------------------------------------
+        |
+        | O JavaScript poderá chamar:
+        |
+        | window.Android.isAndroidApp()
+        | window.Android.getFirebaseToken()
+        |
+        |--------------------------------------------------------------------------
+        */
+
+        webView.addJavascriptInterface(
+            AndroidBridge(this),
+            "Android"
+        )
+
+        webView.setLayerType(
+            WebView.LAYER_TYPE_HARDWARE,
+            null
+        )
+
+        configurarNavegacao()
+
+        configurarUpload()
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | NAVEGAÇÃO
+    |--------------------------------------------------------------------------
+    |
+    | Somente o domínio oficial abre dentro do WebView.
+    | Links externos são enviados ao aplicativo correspondente.
+    |
+    |--------------------------------------------------------------------------
+    */
+
+    private fun configurarNavegacao() {
 
         webView.webViewClient = object : WebViewClient() {
 
@@ -93,24 +239,22 @@ class MainActivity : AppCompatActivity() {
                 request: WebResourceRequest?
             ): Boolean {
 
-                val url = request?.url.toString()
+                val uri = request?.url ?: return false
 
-                // 🔥 WHATSAPP E LINKS EXTERNOS
-                if (
-                    url.contains("wa.me") ||
-                    url.contains("api.whatsapp.com") ||
-                    url.contains("web.whatsapp.com")
-                ) {
-                    try {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                        startActivity(intent)
-                        return true
-                    } catch (e: Exception) {
-                        return false
-                    }
+                return tratarUrl(uri)
+            }
+
+            @Deprecated("Compatibilidade com versões antigas do Android")
+            override fun shouldOverrideUrlLoading(
+                view: WebView?,
+                url: String?
+            ): Boolean {
+
+                if (url.isNullOrBlank()) {
+                    return false
                 }
 
-                return false
+                return tratarUrl(Uri.parse(url))
             }
 
             override fun onReceivedSslError(
@@ -118,6 +262,8 @@ class MainActivity : AppCompatActivity() {
                 handler: SslErrorHandler,
                 error: SslError?
             ) {
+
+                // Nunca ignora erro de certificado.
                 handler.cancel()
             }
 
@@ -126,72 +272,230 @@ class MainActivity : AppCompatActivity() {
                 request: WebResourceRequest?,
                 error: WebResourceError?
             ) {
-                view?.loadData(
-                    "<h2>Sem conexão</h2><p>Verifique sua internet.</p>",
+
+                if (request?.isForMainFrame != true) {
+                    return
+                }
+
+                view?.loadDataWithBaseURL(
+                    siteUrl,
+                    """
+                    <!doctype html>
+                    <html lang="pt-BR">
+                    <head>
+                        <meta charset="UTF-8">
+                        <meta name="viewport"
+                              content="width=device-width,initial-scale=1">
+                        <title>Sem conexão</title>
+                    </head>
+                    <body style="
+                        background:#07090d;
+                        color:#fff;
+                        font-family:Arial,sans-serif;
+                        padding:40px 24px;
+                        text-align:center;
+                    ">
+                        <h2>Sem conexão</h2>
+                        <p>Verifique sua internet e abra o aplicativo novamente.</p>
+                    </body>
+                    </html>
+                    """.trimIndent(),
                     "text/html",
-                    "UTF-8"
+                    "UTF-8",
+                    null
                 )
             }
         }
+    }
 
-        // 🔥 UPLOAD DE ARQUIVO (LOGO)
+    private fun tratarUrl(uri: Uri): Boolean {
+
+        val scheme = uri.scheme?.lowercase()
+        val host = uri.host?.lowercase()
+
+        /*
+        |--------------------------------------------------------------------------
+        | DOMÍNIO INTERNO
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            (scheme == "https" || scheme == "http") &&
+            (
+                host == siteHost ||
+                host == "www.$siteHost"
+            )
+        ) {
+
+            return false
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | LINKS EXTERNOS
+        |--------------------------------------------------------------------------
+        */
+
+        return try {
+
+            val intent = Intent(
+                Intent.ACTION_VIEW,
+                uri
+            )
+
+            startActivity(intent)
+
+            true
+
+        } catch (exception: Exception) {
+
+            true
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | UPLOAD DE ARQUIVOS
+    |--------------------------------------------------------------------------
+    */
+
+    private fun configurarUpload() {
+
         webView.webChromeClient = object : WebChromeClient() {
 
             override fun onShowFileChooser(
                 webView: WebView?,
-                filePathCallback: ValueCallback<Array<Uri>>?,
+                callback: ValueCallback<Array<Uri>>?,
                 fileChooserParams: FileChooserParams?
             ): Boolean {
 
-                this@MainActivity.filePathCallback = filePathCallback
+                filePathCallback?.onReceiveValue(null)
 
-                val intent = Intent(Intent.ACTION_GET_CONTENT)
-                intent.type = "*/*"
-                intent.addCategory(Intent.CATEGORY_OPENABLE)
+                filePathCallback = callback
 
-                startActivityForResult(
-                    Intent.createChooser(intent, "Selecionar arquivo"),
-                    FILE_CHOOSER_REQUEST_CODE
-                )
+                val intent = Intent(
+                    Intent.ACTION_GET_CONTENT
+                ).apply {
 
-                return true
-            }
-        }
+                    type = "*/*"
 
-        webView.loadUrl("https://cortecertoagendamentos.com.br/")
+                    addCategory(
+                        Intent.CATEGORY_OPENABLE
+                    )
+                }
 
-        // 🔥 BACK BUTTON
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if (webView.canGoBack()) {
-                    webView.goBack()
-                } else {
-                    finish()
+                return try {
+
+                    startActivityForResult(
+                        Intent.createChooser(
+                            intent,
+                            "Selecionar arquivo"
+                        ),
+                        fileChooserRequestCode
+                    )
+
+                    true
+
+                } catch (exception: Exception) {
+
+                    filePathCallback = null
+
+                    false
                 }
             }
-        })
+        }
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
+    /*
+    |--------------------------------------------------------------------------
+    | RESULTADO DO UPLOAD
+    |--------------------------------------------------------------------------
+    */
 
-            if (filePathCallback == null) return
+    @Deprecated("Compatibilidade com o seletor de arquivos atual")
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?
+    ) {
 
-            val result = if (resultCode == Activity.RESULT_OK && data != null) {
+        if (requestCode == fileChooserRequestCode) {
+
+            val resultado = if (
+                resultCode == Activity.RESULT_OK &&
+                data?.data != null
+            ) {
+
                 arrayOf(data.data!!)
+
             } else {
+
                 null
             }
 
-            filePathCallback?.onReceiveValue(result)
+            filePathCallback?.onReceiveValue(resultado)
+
             filePathCallback = null
         }
 
-        super.onActivityResult(requestCode, resultCode, data)
+        super.onActivityResult(
+            requestCode,
+            resultCode,
+            data
+        )
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | BOTÃO VOLTAR
+    |--------------------------------------------------------------------------
+    */
+
+    private fun configurarBotaoVoltar() {
+
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+
+                override fun handleOnBackPressed() {
+
+                    if (webView.canGoBack()) {
+
+                        webView.goBack()
+
+                    } else {
+
+                        finish()
+                    }
+                }
+            }
+        )
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | ENCERRAMENTO
+    |--------------------------------------------------------------------------
+    */
+
     override fun onDestroy() {
-        webView.destroy()
+
+        if (::webView.isInitialized) {
+
+            webView.removeJavascriptInterface(
+                "Android"
+            )
+
+            webView.stopLoading()
+
+            webView.webChromeClient = null
+
+            webView.webViewClient =
+                object : WebViewClient() {}
+
+            webView.destroy()
+        }
+
         super.onDestroy()
     }
 }
