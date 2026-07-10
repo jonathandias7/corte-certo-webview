@@ -30,51 +30,105 @@ jobs:
       # INSTALAR ANDROID SDK
       # ------------------------------------------------------------
       - name: Instalar Android SDK manual
+        shell: bash
         run: |
-          export ANDROID_HOME=$HOME/android-sdk
+          set -e
+
+          export ANDROID_HOME="$HOME/android-sdk"
 
           mkdir -p "$ANDROID_HOME/cmdline-tools"
 
           cd "$ANDROID_HOME/cmdline-tools"
 
-          wget https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip -O tools.zip
+          wget -q \
+            https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip \
+            -O tools.zip
 
-          unzip tools.zip
+          unzip -q tools.zip
 
           mv cmdline-tools latest
 
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
 
-          yes | sdkmanager --licenses
+          yes | sdkmanager --licenses > /dev/null || true
 
           sdkmanager "platform-tools"
-          sdkmanager "build-tools;34.0.0"
           sdkmanager "build-tools;35.0.0"
           sdkmanager "platforms;android-35"
 
       # ------------------------------------------------------------
-      # REMOVER SDK ANTIGO DO RUNNER
-      # ------------------------------------------------------------
-      - name: Remover SDK antigo
-        run: |
-          sudo rm -rf /usr/local/lib/android/sdk || true
-
-      # ------------------------------------------------------------
-      # CONFIGURAR VARIÁVEIS DO SDK
+      # CONFIGURAR VARIÁVEIS DO ANDROID SDK
       # ------------------------------------------------------------
       - name: Configurar variáveis do Android SDK
+        shell: bash
         run: |
           echo "ANDROID_HOME=$HOME/android-sdk" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> "$GITHUB_ENV"
+          echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$HOME/android-sdk/platform-tools" >> "$GITHUB_PATH"
 
       # ------------------------------------------------------------
       # INSTALAR GRADLE 8.7
       # ------------------------------------------------------------
       - name: Instalar Gradle 8.7
+        shell: bash
         run: |
-          wget https://services.gradle.org/distributions/gradle-8.7-bin.zip
+          set -e
 
-          unzip gradle-8.7-bin.zip
+          wget -q \
+            https://services.gradle.org/distributions/gradle-8.7-bin.zip \
+            -O gradle-8.7-bin.zip
 
-          echo "$PWD/gradle-8.
+          unzip -q gradle-8.7-bin.zip
+
+          echo "$GITHUB_WORKSPACE/gradle-8.7/bin" >> "$GITHUB_PATH"
+
+      # ------------------------------------------------------------
+      # GERAR GRADLE WRAPPER
+      # ------------------------------------------------------------
+      - name: Gerar Gradle Wrapper
+        shell: bash
+        run: |
+          gradle wrapper --gradle-version 8.7
+
+      # ------------------------------------------------------------
+      # PERMISSÃO DO GRADLE
+      # ------------------------------------------------------------
+      - name: Dar permissão ao Gradle Wrapper
+        shell: bash
+        run: |
+          chmod +x gradlew
+
+      # ------------------------------------------------------------
+      # DECODIFICAR CHAVE DE ASSINATURA
+      # ------------------------------------------------------------
+      - name: Decodificar Keystore
+        shell: bash
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" \
+            | base64 --decode \
+            > app/keystore.jks
+
+      # ------------------------------------------------------------
+      # GERAR AAB ASSINADO
+      # ------------------------------------------------------------
+      - name: Build AAB
+        shell: bash
+        run: |
+          ./gradlew clean
+
+          ./gradlew bundleRelease \
+            -Pandroid.injected.signing.store.file="$GITHUB_WORKSPACE/app/keystore.jks" \
+            -Pandroid.injected.signing.store.password="${{ secrets.KEYSTORE_PASSWORD }}" \
+            -Pandroid.injected.signing.key.alias="${{ secrets.KEY_ALIAS }}" \
+            -Pandroid.injected.signing.key.password="${{ secrets.KEY_PASSWORD }}"
+
+      # ------------------------------------------------------------
+      # DISPONIBILIZAR O AAB
+      # ------------------------------------------------------------
+      - name: Upload AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: corte-certo-5-1-aab
+          path: app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
