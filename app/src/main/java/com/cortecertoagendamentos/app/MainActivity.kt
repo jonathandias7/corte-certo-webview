@@ -10,12 +10,52 @@ import android.os.Bundle
 import android.webkit.*
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.google.firebase.messaging.FirebaseMessaging
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private val FILE_CHOOSER_REQUEST_CODE = 100
+    private var firebaseToken = ""
+    private fun iniciarFirebase() {
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+
+        if (
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                100
+            )
+        }
+    }
+
+    FirebaseMessaging.getInstance().token
+        .addOnSuccessListener {
+
+            firebaseToken = it
+
+            android.webkit.CookieManager.getInstance().setCookie(
+                "https://cortecertoagendamentos.com.br",
+                "firebase_token=$it"
+            )
+
+            android.webkit.CookieManager.getInstance().flush()
+
+        }
+
+}
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -23,7 +63,7 @@ class MainActivity : AppCompatActivity() {
 
         webView = WebView(this)
         setContentView(webView)
-
+        iniciarFirebase()
         val settings = webView.settings
 
         settings.javaScriptEnabled = true
