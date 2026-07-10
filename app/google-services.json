@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "368934557388",
+    "project_id": "corte-certo-e2745",
+    "storage_bucket": "corte-certo-e2745.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:368934557388:android:fb7d7c5b872bfa69145469",
+        "android_client_info": {
+          "package_name": "com.cortecertoagendamentos.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDhAXUzTy8l55O-sf3N-eCTY7KTG8cHX2w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
